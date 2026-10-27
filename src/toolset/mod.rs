@@ -71,6 +71,7 @@ mod tool_version_options;
 mod toolset_env;
 mod toolset_install;
 mod toolset_paths;
+mod version_fallback;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ToolInfo {

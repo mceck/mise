@@ -3303,7 +3303,7 @@ fn tools_by_source_for_update(
         HashMap::new();
     for (ba, tvl) in &ts.versions {
         for tv in &tvl.versions {
-            if tv.is_deferred() {
+            if tv.is_deferred() || tv.is_fallback() {
                 continue;
             }
             // An installed `latest` resolves to its install directory name;
@@ -3341,17 +3341,17 @@ fn tools_by_source_for_update(
     tools_by_source
 }
 
-/// The tools with a lazy request left unresolved, by source. Such a request has no
-/// release to lock, and the merge replaces a tool's entries as a whole, so the
-/// lockfile keeps what it has for the tool, including when another request for it
-/// was installed.
+/// The tools with a lazy request left unresolved, or resolved to a fallback
+/// version, by source. Such a request has no release of its own to lock, and the
+/// merge replaces a tool's entries as a whole, so the lockfile keeps what it has
+/// for the tool, including when another request for it was installed.
 fn tools_left_alone(ts: &Toolset) -> HashSet<(ToolSource, String)> {
     ts.versions
         .iter()
         .flat_map(|(ba, tvl)| {
             tvl.versions
                 .iter()
-                .filter(|tv| tv.is_deferred())
+                .filter(|tv| tv.is_deferred() || tv.is_fallback())
                 .map(|tv| (tv.request.source().clone(), ba.short.to_string()))
         })
         .collect()

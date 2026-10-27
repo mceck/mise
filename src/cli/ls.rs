@@ -837,15 +837,20 @@ async fn resolve_version_status(
     active: bool,
 ) -> VersionStatus {
     let install_path = tv.install_path();
+    let version = if tv.is_fallback() {
+        format!("{} (fallback)", tv.display_version())
+    } else {
+        tv.display_version().to_string()
+    };
     if install_path.is_symlink() && !is_runtime_symlink(&install_path) {
         // `exists()` resolves the link, so this is asking whether it still leads anywhere.
         if install_path.exists() {
-            VersionStatus::Symlink(tv.display_version().to_string(), active)
+            VersionStatus::Symlink(version, active)
         } else {
-            VersionStatus::BrokenSymlink(tv.display_version().to_string())
+            VersionStatus::BrokenSymlink(version)
         }
     } else if !p.is_version_installed(config, tv, true) {
-        VersionStatus::Missing(tv.display_version().to_string())
+        VersionStatus::Missing(version)
     } else {
         let category = env::install_path_category(&install_path);
         if category != env::InstallPathCategory::Local {
@@ -854,17 +859,18 @@ async fn resolve_version_status(
                 env::InstallPathCategory::Shared => "shared",
                 _ => unreachable!(),
             };
-            return VersionStatus::Shared(tv.display_version().to_string(), active, label);
+            return VersionStatus::Shared(version, active, label);
         }
         if active {
-            let outdated = if ls.outdated {
+            // A fallback version is one the user chose to tolerate in place of the request.
+            let outdated = if ls.outdated && !tv.is_fallback() {
                 p.is_version_outdated(config, tv).await
             } else {
                 false
             };
-            VersionStatus::Active(tv.display_version().to_string(), outdated)
+            VersionStatus::Active(version, outdated)
         } else {
-            VersionStatus::Inactive(tv.display_version().to_string())
+            VersionStatus::Inactive(version)
         }
     }
 }

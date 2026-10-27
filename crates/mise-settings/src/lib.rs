@@ -473,6 +473,21 @@ where
         .map(|set| set.into_iter().collect())
 }
 
+/// Like [`set_by_comma`], but also splits on whitespace, so lists written for
+/// asdf (`ASDF_IGNORE_MINOR="nodejs golang"`) work as they are.
+fn set_by_comma_or_space<T, C>(input: &str) -> Result<C, <T as FromStr>::Err>
+where
+    T: FromStr + Eq + Ord,
+    C: FromIterator<T>,
+{
+    input
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|s| !s.is_empty())
+        .map(T::from_str)
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map(|set| set.into_iter().collect())
+}
+
 fn validate_setting_enum_values<'a>(
     name: &str,
     values: impl IntoIterator<Item = &'a str>,

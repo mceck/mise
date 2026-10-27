@@ -22,8 +22,14 @@ pub const MISE_INSTALL_VERSION_ENV_VAR: &str = "MISE_INSTALL_VERSION";
 
 pub const MISE_TOOL_VERSION_ENV_VAR: &str = "MISE_TOOL_VERSION";
 
-pub const NON_TOOL_VERSION_ENV_VARS: &[&str] =
-    &[MISE_INSTALL_VERSION_ENV_VAR, MISE_TOOL_VERSION_ENV_VAR];
+/// The `ignore_version` setting, not a version for a tool named `ignore`.
+pub const MISE_IGNORE_VERSION_ENV_VAR: &str = "MISE_IGNORE_VERSION";
+
+pub const NON_TOOL_VERSION_ENV_VARS: &[&str] = &[
+    MISE_INSTALL_VERSION_ENV_VAR,
+    MISE_TOOL_VERSION_ENV_VAR,
+    MISE_IGNORE_VERSION_ENV_VAR,
+];
 
 #[cfg(unix)]
 pub static SHELL: Lazy<String> = Lazy::new(|| var("SHELL").unwrap_or_else(|_| "sh".into()));

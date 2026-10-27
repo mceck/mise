@@ -18,7 +18,9 @@ use crate::install_before::{
 };
 use crate::lockfile::{AubeLock, CondaPackageInfo, LockfileTool, PlatformInfo};
 use crate::runtime_symlinks::is_runtime_symlink;
-use crate::toolset::{ToolRequest, ToolSource, ToolVersionOptions, install_state, tool_request};
+use crate::toolset::{
+    ToolRequest, ToolSource, ToolVersionOptions, install_state, tool_request, version_fallback,
+};
 use crate::versions_index::IndexPick;
 use crate::{dirs, env};
 use console::style;
@@ -50,6 +52,9 @@ pub struct ToolVersion {
     /// A lazy request left unresolved because nothing is installed: `version` is
     /// the request itself, not a release, so nothing may record or compare it as one.
     deferred: bool,
+    /// An installed version standing in for a requested version that is not
+    /// installed (see `ignore_patch`, `ignore_minor` and `ignore_version`).
+    fallback: bool,
     pub lock_platforms: BTreeMap<String, PlatformInfo>,
     pub install_path: Option<PathBuf>,
     /// The HTTP backend should treat `install_path` as the final destination
@@ -164,6 +169,7 @@ impl ToolVersion {
             locked: false,
             resolved_from_lockfile: false,
             deferred: false,
+            fallback: false,
             lock_platforms: Default::default(),
             install_path: None,
             install_path_is_exact: false,
@@ -224,7 +230,9 @@ impl ToolVersion {
             && !has_linked_version(request.ba(), &linked_query)
             && let Some(lt) = request.lockfile_resolve(config)?
         {
-            return Ok(Self::from_lockfile(request.clone(), lt).with_before_date(opts.before_date));
+            return Ok(Self::from_lockfile(request.clone(), lt)
+                .or_fallback(&opts)
+                .with_before_date(opts.before_date));
         }
         let backend = request.ba().backend()?;
         if let Some(plugin) = backend.plugin()
@@ -262,7 +270,7 @@ impl ToolVersion {
                 Self::new(request, version)
             }
         };
-        let tv = tv.with_before_date(opts.before_date);
+        let tv = tv.or_fallback(&opts).with_before_date(opts.before_date);
         trace!("resolved: {tv}");
         Ok(tv)
     }
@@ -376,6 +384,51 @@ impl ToolVersion {
     /// Whether this is a lazy request left unresolved, so `version` only echoes it.
     pub fn is_deferred(&self) -> bool {
         self.deferred
+    }
+
+    /// Whether this installed version stands in for a requested version that is
+    /// not installed, so nothing may record it as what the config asked for.
+    pub fn is_fallback(&self) -> bool {
+        self.fallback
+    }
+
+    /// This version, or an installed fallback version when it is not installed.
+    fn or_fallback(self, opts: &ResolveOptions) -> Self {
+        if self.deferred || self.fallback {
+            return self;
+        }
+        Self::fallback_for(&self.request, &self.version, opts).unwrap_or(self)
+    }
+
+    /// An installed version that stands in for `version` when it is not installed
+    /// and the user tolerates that for the tool in `ignore_patch`, `ignore_minor`
+    /// or `ignore_version`. Versions given on the command line are used as written,
+    /// and commands looking for newer versions see the request as it is.
+    fn fallback_for(request: &ToolRequest, version: &str, opts: &ResolveOptions) -> Option<Self> {
+        if opts.latest_versions
+            || opts.no_fallback_versions
+            || !matches!(request, ToolRequest::Version { .. })
+            || matches!(request.source(), ToolSource::Argument)
+        {
+            return None;
+        }
+        let level = version_fallback::IgnoreLevel::for_tool(request.ba())?;
+        let backend = request.backend().ok()?;
+        if backend
+            .list_installed_versions()
+            .iter()
+            .any(|v| v == version)
+        {
+            return None;
+        }
+        let installed = level.find(&backend, version)?;
+        debug!("{backend}@{version} is not installed, falling back to {installed}");
+        let mut tv = Self::from_installed(request.clone(), installed);
+        tv.fallback = true;
+        // The request's runtime symlink (`installs/node/20`) may lead to another
+        // installed version, so PATH names the fallback's own directory.
+        tv.locked = true;
+        Some(tv)
     }
 
     pub(crate) fn request_pinned_this_version(&self) -> bool {
@@ -668,6 +721,7 @@ impl ToolVersion {
             warn_not_in_lockfile: base_opts.warn_not_in_lockfile,
             defer_missing_lazy_tools: false,
             defer_missing_lazy_online: false,
+            no_fallback_versions: true,
         };
         let tv = self.request.resolve(config, &opts).await?;
         Ok(tv.version)
@@ -1044,6 +1098,11 @@ impl ToolVersion {
                 .and_then(|matches| matches.last())
         {
             return Ok(Self::from_installed(request, v.clone()));
+        }
+        // Fall back before looking for the request remotely: the fallback does not
+        // need the network, and a fully-qualified request may never reach it offline.
+        if let Some(tv) = Self::fallback_for(&request, &v, opts) {
+            return Ok(tv);
         }
         if defer_missing_lazy {
             return build(v).map(Self::into_deferred);
@@ -1480,6 +1539,9 @@ pub struct ResolveOptions {
     /// Defer those lazy tools even when not under `prefer_offline`. For a command that
     /// manages one tool's versions and so resolves the others only to look them up.
     pub defer_missing_lazy_online: bool,
+    /// Resolve every request to what it asks for, never to an installed fallback
+    /// version. For commands that record versions, such as `mise lock`.
+    pub no_fallback_versions: bool,
 }
 
 impl Default for ResolveOptions {
@@ -1501,6 +1563,7 @@ impl Default for ResolveOptions {
             warn_not_in_lockfile: true,
             defer_missing_lazy_tools: false,
             defer_missing_lazy_online: false,
+            no_fallback_versions: false,
         }
     }
 }
@@ -1701,6 +1764,9 @@ impl Display for ResolveOptions {
         }
         if self.offline {
             opts.push("offline".to_string());
+        }
+        if self.no_fallback_versions {
+            opts.push("no_fallback_versions".to_string());
         }
         if self.refresh_remote_versions {
             opts.push("refresh_remote_versions".to_string());

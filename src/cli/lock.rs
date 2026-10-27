@@ -659,6 +659,9 @@ impl Lock {
             // Lock moving channels to their current concrete value without making
             // ordinary `latest` requests ignore an installed concrete version.
             resolve_rolling_channels: true,
+            // A fallback version stands in for the request locally; the lockfile
+            // keeps what the project asked for.
+            no_fallback_versions: true,
             ..Default::default()
         };
         let monorepo_union = if !self.global && config.monorepo_lockfile_root().is_some() {

@@ -300,7 +300,11 @@ impl Upgrade {
                     filter_tools,
                     exclude_tools,
                     show_progress: self.show_resolution_progress(),
-                    select: &|tv| !unrun.contains(&tv.request),
+                    // A fallback version is one the user chose to tolerate in place
+                    // of the request, so a bare upgrade leaves it alone.
+                    select: &|tv| {
+                        !unrun.contains(&tv.request) && !(self.tool.is_empty() && tv.is_fallback())
+                    },
                 },
             )
             .await;
@@ -482,6 +486,7 @@ impl Upgrade {
             warn_not_in_lockfile: true,
             defer_missing_lazy_tools: false,
             defer_missing_lazy_online: false,
+            no_fallback_versions: false,
         };
         // Filter tools to check before doing expensive version lookups
         let filter_tools = if !self.interactive && !self.tool.is_empty() {
@@ -750,7 +755,9 @@ impl Upgrade {
                         filter_tools,
                         exclude_tools,
                         show_progress: false,
-                        select: &|tv| !(self.tool.is_empty() && tv.is_unrun_lazy()),
+                        select: &|tv| {
+                            !(self.tool.is_empty() && (tv.is_unrun_lazy() || tv.is_fallback()))
+                        },
                     },
                 )
                 .await
@@ -958,6 +965,7 @@ impl Upgrade {
                 warn_not_in_lockfile: true,
                 defer_missing_lazy_tools: false,
                 defer_missing_lazy_online: false,
+                no_fallback_versions: false,
             },
             // What resolves after the install leaves missing lazy tools alone, as the
             // toolset builder did before it.

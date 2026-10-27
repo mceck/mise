@@ -403,8 +403,9 @@ pub fn tool_from_env_var_name(name: &str) -> Option<String> {
 
 /// Yields `(short, key, value)` for each `MISE_<TOOL>_VERSION` env var that
 /// maps to a tool. `short` is the unaliased backend short name (so
-/// `MISE_NODEJS_VERSION` yields `"node"`). Skips `MISE_VERSION` and the
-/// `MISE_INSTALL_VERSION` / `MISE_TOOL_VERSION` vars set during hooks.
+/// `MISE_NODEJS_VERSION` yields `"node"`). Skips `MISE_VERSION`, the
+/// `MISE_IGNORE_VERSION` setting and the `MISE_INSTALL_VERSION` /
+/// `MISE_TOOL_VERSION` vars set during hooks.
 pub fn tool_env_vars() -> impl Iterator<Item = (String, String, String)> {
     env::vars_safe().filter_map(|(k, v)| {
         let short = tool_from_env_var_name(&k)?;
@@ -471,6 +472,7 @@ mod tests {
             tool_from_env_var_name("MISE_NODEJS_VERSION").as_deref(),
             Some("node")
         );
+        assert_eq!(tool_from_env_var_name("MISE_IGNORE_VERSION"), None);
     }
 
     #[test]

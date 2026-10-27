@@ -468,3 +468,15 @@ fn settings_table_redacts_secret_values_at_any_depth() {
         Some("[redacted]")
     );
 }
+
+#[test]
+fn test_set_by_comma_or_space() {
+    let parse = |input| -> BTreeSet<String> { set_by_comma_or_space(input).unwrap() };
+    let expected: BTreeSet<String> = ["go", "nodejs", "rust"].map(String::from).into();
+    assert_eq!(parse("nodejs golang rust").len(), 3);
+    assert_eq!(parse("nodejs go  rust"), expected);
+    assert_eq!(parse("nodejs,go, rust"), expected);
+    assert_eq!(parse(" nodejs\tgo,rust "), expected);
+    assert_eq!(parse("*"), ["*".to_string()].into());
+    assert!(parse("  , ").is_empty());
+}

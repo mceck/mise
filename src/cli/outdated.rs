@@ -140,6 +140,13 @@ impl Outdated {
             .collect::<HashSet<_>>();
         ts.versions
             .retain(|_, tvl| tool_set.is_empty() || tool_set.contains(&tvl.backend));
+        // A fallback version is one the user chose to tolerate in place of the
+        // request, so only a tool named on the command line is checked.
+        if tool_set.is_empty() {
+            for tvl in ts.versions.values_mut() {
+                tvl.versions.retain(|tv| !tv.is_fallback());
+            }
+        }
         let outdated = ts
             .list_outdated_versions(
                 &config,
